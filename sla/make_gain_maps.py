@@ -12,6 +12,7 @@ import cartopy
 cartopy.config["data_dir"] = "/Odyssey/private/d21botvy/cartopy_data"
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from cartopy.mpl.ticker import LatitudeFormatter, LongitudeFormatter
 import matplotlib
 
 matplotlib.use("Agg")
@@ -29,8 +30,8 @@ def main(out: Path, lead: int) -> None:
     levels = numpy.arange(-30, 31, 5)
     norm = BoundaryNorm(levels, 256, extend="both")
     lat_edges, lon_edges = numpy.arange(-90, 90.1, 2), numpy.arange(-180, 180.1, 2)
-    fig, axes = plt.subplots(2, 2, figsize=(7.2, 4.4), subplot_kw={"projection": ccrs.Robinson(central_longitude=0)})
-    for ax, (system, view) in zip(axes.flat, SYSTEMS.items()):
+    fig, axes = plt.subplots(2, 2, figsize=(7.2, 4.1), gridspec_kw={"wspace": 0.06, "hspace": 0.18}, subplot_kw={"projection": ccrs.PlateCarree()})
+    for k, (ax, (system, view)) in enumerate(zip(axes.flat, SYSTEMS.items())):
         change = -numpy.load(view / "results" / "swot_gain" / "maps.npz")[f"sla_{lead}"]
         mesh = ax.pcolormesh(lon_edges, lat_edges, change, cmap="RdBu_r", norm=norm, transform=ccrs.PlateCarree(), rasterized=True)
         ax.add_feature(cfeature.LAND, facecolor="0.85", edgecolor="none", zorder=2)
@@ -39,9 +40,13 @@ def main(out: Path, lead: int) -> None:
             ax.plot([b0, b1, b1, b0, b0], [a0, a0, a1, a1, a0], color="k", lw=0.7, transform=ccrs.PlateCarree(), zorder=4)
         for y in (-20, 20):
             ax.plot([-180, 180], [y, y], color="0.3", lw=0.5, ls="--", transform=ccrs.PlateCarree(), zorder=4)
-        ax.set_global()
-        ax.set_title(system, fontsize=9)
-    cbar = fig.colorbar(mesh, ax=axes, orientation="horizontal", fraction=0.05, pad=0.04, aspect=40, ticks=levels)
+        ax.set_extent([-180, 180, -80, 82], crs=ccrs.PlateCarree())
+        ax.set_xticks(range(-120, 121, 60), crs=ccrs.PlateCarree()); ax.set_yticks(range(-60, 61, 30), crs=ccrs.PlateCarree())
+        ax.tick_params(labelbottom=k >= 2, labelleft=k % 2 == 0)
+        ax.tick_params(labelsize=6)
+        ax.xaxis.set_major_formatter(LongitudeFormatter()); ax.yaxis.set_major_formatter(LatitudeFormatter())
+        ax.set_title(f"({'abcd'[k]}) {system}", fontsize=9, loc="left", pad=3)
+    cbar = fig.colorbar(mesh, ax=axes, orientation="horizontal", fraction=0.05, pad=0.08, aspect=40, ticks=levels)
     cbar.set_label(f"Change in SLA RMSE with SWOT input, leadtime {lead} (%); negative: SWOT helps")
     fig.savefig(out / "fig-gain-maps.pdf", dpi=250, bbox_inches="tight")
     print("written", out / "fig-gain-maps.pdf")
