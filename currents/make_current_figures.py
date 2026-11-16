@@ -101,6 +101,57 @@ def polar_by_subset(out: Path, r_max: float = 5.0) -> None:
         plt.close(fig)
 
 
+PAPER_POLAR = {"boundary": "fig-currents-polar-boundary.pdf", "swot_t-1": "fig-currents-polar-swath.pdf",
+               "all_20_60": "fig-currents-polar-all.pdf"}
+
+
+def polar_paper(out: Path, r_max: float = 3.0) -> None:
+    """Paper figures, one per subset: columns = systems, rows = Nadir and Nadir+SWOT input, leadtime 1, one colour scale per figure."""
+    ratios = numpy.load(RES / "lead1_ratios.npz")
+    stats = pandas.read_csv(RES / "ratio_stats.csv")
+    stats = stats[(stats.lead == 1) & (stats.currents == "cyclogeostrophic")]
+    theta_edges = numpy.deg2rad(numpy.linspace(-180, 180, 37))
+    r_edges = numpy.linspace(0, r_max, 31)
+    area = numpy.diff(r_edges)[None] * 0.5 * (r_edges[1:] + r_edges[:-1])[None]
+    inputs = ("Nadir", "Nadir+SWOT")
+    for subset, name in PAPER_POLAR.items():
+        hist, outside = {}, {}
+        for system in SYSTEMS:
+            for inp in inputs:
+                r = ratios[f"{system}|{inp}|{subset}"]
+                h, _, _ = numpy.histogram2d(numpy.angle(r), numpy.abs(r), [theta_edges, r_edges])
+                hist[(system, inp)] = 100 * h / len(r) / area  # % of points per unit area of the r plane
+                outside[(system, inp)] = 100 * numpy.mean(numpy.abs(r) > r_max)
+        vmax = numpy.percentile(numpy.concatenate([h.ravel() for h in hist.values()]), 99.5)
+        fig, axes = plt.subplots(2, len(SYSTEMS), figsize=(7.2, 6.0), subplot_kw={"projection": "polar"})
+        k = 0
+        for row, inp in enumerate(inputs):
+            for col, system in enumerate(SYSTEMS):
+                ax = axes[row, col]
+                mesh = ax.pcolormesh(theta_edges, r_edges, hist[(system, inp)].T, cmap="Blues", vmin=0, vmax=vmax, shading="flat", rasterized=True)
+                ax.plot(numpy.linspace(-numpy.pi, numpy.pi, 200), numpy.ones(200), color="0.35", lw=0.6, ls="--")
+                ax.plot([0], [1], marker="+", color="#D55E00", ms=6, mew=1.0)
+                ax.set_ylim(0, r_max); ax.set_yticks([1, 2]); ax.set_yticklabels(["1", "2"], fontsize=5.5)
+                ax.set_rlabel_position(60)
+                ax.set_xticks(numpy.deg2rad([0, 90, 180, 270])); ax.set_xticklabels(["0°", "90°", "180°", "-90°"], fontsize=5.5)
+                ax.tick_params(pad=0)
+                ax.grid(lw=0.3, color="0.8")
+                st = stats[(stats.system == system) & (stats.subset == subset) & (stats.input == inp)].iloc[0]
+                ax.text(0.5, -0.27, f"{st.pct_angle45:.1f} % within 45°\nmedian |r| {st.median_ratio:.2f}\n"
+                        f"RMS error {st.rms_vec_err_cm_s:.1f} cm s$^{{-1}}$\n|r| > {r_max:.0f}: {outside[(system, inp)]:.0f} %", transform=ax.transAxes, ha="center", va="top", fontsize=6)
+                ax.set_title(f"({'abcdefgh'[k]}) {system}", fontsize=7.5, pad=12)
+                if col == 0:
+                    ax.text(-0.36, 0.5, f"{inp} input", transform=ax.transAxes, rotation=90, va="center", ha="center", fontsize=8)
+                k += 1
+        fig.subplots_adjust(left=0.07, right=0.99, top=0.94, bottom=0.23, hspace=0.95, wspace=0.42)
+        cax = fig.add_axes([0.3, 0.075, 0.4, 0.015])
+        cbar = fig.colorbar(mesh, cax=cax, orientation="horizontal", extend="max")
+        cbar.set_label("Share of points per unit area of the ratio plane (%)", fontsize=6.5); cbar.ax.tick_params(labelsize=6)
+        fig.savefig(out / name, dpi=250)
+        plt.close(fig)
+        print(name, "n =", int(st.n), "share |r| >", r_max, {f"{s}|{i}": round(v, 1) for (s, i), v in outside.items()})
+
+
 def lead(out: Path) -> None:
     stats = pandas.read_csv(RES / "ratio_stats.csv")
     stats = stats[stats.currents == "cyclogeostrophic"]
@@ -140,7 +191,8 @@ def rotary(out: Path) -> None:
             ax.axvline(x, color="0.4", lw=0.6, ls=":")
         ax.set_title(label); ax.set_xlabel("Frequency (cpd)"); ax.grid(lw=0.3, color="0.85")
     axes[0].set_ylabel(r"Power (m$^2$ s$^{-2}$ cpd$^{-1}$, arbitrary scale)")
-    axes[1].legend(frameon=False, fontsize=6.5)
+    axes[0].set_ylim(1e-7, 10)
+    axes[0].legend(frameon=False, fontsize=6.5, loc="lower left")
     fig.tight_layout()
     fig.savefig(out / "fig-rotary-spectra.pdf")
     plt.close(fig)
@@ -148,7 +200,7 @@ def rotary(out: Path) -> None:
 
 if __name__ == "__main__":
     target = Path(sys.argv[1])
-    for job in (polar, lead, rotary):
+    for job in (polar_paper, lead, rotary):
         try:
             job(target)
             print(job.__name__, "ok")
