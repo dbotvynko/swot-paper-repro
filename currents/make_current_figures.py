@@ -57,6 +57,50 @@ def polar(out: Path) -> None:
     plt.close(fig)
 
 
+ALL_SUBSETS = {"all_20_60": "All points 20-60°", **SUBSETS}
+
+
+def polar_by_subset(out: Path, r_max: float = 5.0) -> None:
+    """Review figures: one per subset, rows = systems, columns = Nadir and Nadir+SWOT input, same colour scale in a figure."""
+    ratios = numpy.load(RES / "lead1_ratios.npz")
+    stats = pandas.read_csv(RES / "ratio_stats.csv")
+    stats = stats[(stats.lead == 1) & (stats.currents == "cyclogeostrophic")]
+    theta_edges = numpy.deg2rad(numpy.linspace(-180, 180, 37))
+    r_edges = numpy.linspace(0, r_max, 26)
+    area = numpy.diff(r_edges)[None] * 0.5 * (r_edges[1:] + r_edges[:-1])[None]
+    for subset, title in ALL_SUBSETS.items():
+        hist, outside = {}, {}
+        for system in SYSTEMS:
+            for inp in ("Nadir", "Nadir+SWOT"):
+                r = ratios[f"{system}|{inp}|{subset}"]
+                h, _, _ = numpy.histogram2d(numpy.angle(r), numpy.abs(r), [theta_edges, r_edges])  # |r| > r_max left out (share printed)
+                hist[(system, inp)] = h / len(r) / area
+                outside[(system, inp)] = 100 * numpy.mean(numpy.abs(r) > r_max)
+        vmax = numpy.percentile(numpy.concatenate([h.ravel() for h in hist.values()]), 99.5)
+        fig, axes = plt.subplots(len(SYSTEMS), 2, figsize=(5.6, 11.5), subplot_kw={"projection": "polar"})
+        for row, system in enumerate(SYSTEMS):
+            for col, inp in enumerate(("Nadir", "Nadir+SWOT")):
+                ax = axes[row, col]
+                ax.pcolormesh(theta_edges, r_edges, hist[(system, inp)].T, cmap="Blues", vmin=0, vmax=vmax, shading="flat", rasterized=True)
+                ax.plot(numpy.linspace(-numpy.pi, numpy.pi, 200), numpy.ones(200), color="0.35", lw=0.6, ls="--")
+                ax.plot([0], [1], marker="+", color="#D55E00", ms=6, mew=1.0)
+                ax.set_ylim(0, r_max); ax.set_yticks([1, 2, 3, 4]); ax.set_yticklabels(["1", "2", "3", "4"], fontsize=6)
+                ax.set_xticks(numpy.deg2rad([0, 90, 180, 270])); ax.set_xticklabels(["0°", "90°", "±180°", "-90°"], fontsize=6)
+                ax.grid(lw=0.3, color="0.8")
+                st = stats[(stats.system == system) & (stats.subset == subset) & (stats.input == inp)].iloc[0]
+                ax.text(0.5, -0.30, f"{st.pct_angle45:.1f} % within 45°, median |r| {st.median_ratio:.2f}\n"
+                        f"RMS vector error {st.rms_vec_err_cm_s:.1f} cm/s; |r| > {r_max:.0f}: {outside[(system, inp)]:.1f} %", transform=ax.transAxes, ha="center", fontsize=6.5)
+                if row == 0:
+                    ax.set_title(f"{inp} input", fontsize=9, pad=16)
+                if col == 0:
+                    ax.text(-0.35, 0.5, system, transform=ax.transAxes, rotation=90, va="center", ha="center", fontsize=9)
+        fig.suptitle(f"{title}, leadtime 1: r = drifter / forecast velocity (cyclogeostrophic)\n"
+                     f"angle = direction error, radius = speed ratio; + marks a perfect forecast; n = {int(st.n)} points", fontsize=8, y=0.995)
+        fig.subplots_adjust(left=0.1, right=0.97, top=0.90, bottom=0.07, hspace=0.75, wspace=0.35)
+        fig.savefig(out / f"review-polar-{subset}.png", dpi=170)
+        plt.close(fig)
+
+
 def lead(out: Path) -> None:
     stats = pandas.read_csv(RES / "ratio_stats.csv")
     stats = stats[stats.currents == "cyclogeostrophic"]
