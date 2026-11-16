@@ -153,25 +153,23 @@ def polar_paper(out: Path, r_max: float = 3.0) -> None:
 
 
 def lead(out: Path) -> None:
+    """Change in RMS vector error with SWOT input against leadtime; boundary boxes and t0-1 swath share the y axis."""
     stats = pandas.read_csv(RES / "ratio_stats.csv")
     stats = stats[stats.currents == "cyclogeostrophic"]
-    fig, axes = plt.subplots(2, 2, figsize=(7.0, 4.6), sharex=True)
-    for col, subset in enumerate(SUBSETS):
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.9), sharex=True, sharey=True)
+    for ax, subset in zip(axes, SUBSETS):
         for system in SYSTEMS:
             t = stats[(stats.system == system) & (stats.subset == subset)].pivot(index="lead", columns="input")
-            d_angle = t[("pct_angle45", "Nadir+SWOT")] - t[("pct_angle45", "Nadir")]
             d_rms = 100 * (t[("rms_vec_err_cm_s", "Nadir+SWOT")] / t[("rms_vec_err_cm_s", "Nadir")] - 1)
-            for ax, d, lo, hi in ((axes[0, col], d_angle, "d_pct_angle45_lo", "d_pct_angle45_hi"), (axes[1, col], d_rms, "d_rms_pct_lo", "d_rms_pct_hi")):
-                ax.fill_between(t.index, t[(lo, "Nadir")], t[(hi, "Nadir")], color=COLORS[system], alpha=0.15, lw=0)
-                ax.plot(t.index, d, color=COLORS[system], lw=1.6, marker="o", ms=3, label=system)
-        axes[0, col].set_title(SUBSETS[subset])
-        for ax in axes[:, col]:
-            ax.axhline(0, color="0.4", lw=0.6)
-            ax.grid(lw=0.3, color="0.85")
-        axes[1, col].set_xlabel("Leadtime (days)")
-    axes[0, 0].set_ylabel("Change in share within 45°\n(percentage points)")
-    axes[1, 0].set_ylabel("Change in RMS vector error (%)")
-    axes[0, 0].legend(frameon=False, fontsize=7, ncol=2)
+            ax.fill_between(t.index, t[("d_rms_pct_lo", "Nadir")], t[("d_rms_pct_hi", "Nadir")], color=COLORS[system], alpha=0.15, lw=0)
+            ax.plot(t.index, d_rms, color=COLORS[system], lw=1.6, marker="o", ms=3, label=system)
+        ax.set_title(SUBSETS[subset])
+        ax.axhline(0, color="0.4", lw=0.6)
+        ax.grid(lw=0.3, color="0.85")
+        ax.set_xlabel("Leadtime (days)")
+        ax.set_xticks(range(1, 8))
+    axes[0].set_ylabel("Change in RMS vector error (%)")
+    axes[0].legend(frameon=False, fontsize=7, ncol=2, loc="lower right")
     fig.tight_layout()
     fig.savefig(out / "fig-currents-lead.pdf")
     plt.close(fig)
