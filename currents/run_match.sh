@@ -12,6 +12,6 @@ export HOME=/Odyssey/private/d21botvy/
 PY=/Odyssey/private/d21botvy/venvs/cyclo/bin/python
 S=/Odyssey/private/d21botvy/swot-paper-repro/currents/drifter_cyclo_eval.py
 cd /Odyssey/private/d21botvy/oceanbench_eval
-$PY -u $S match nadir_only nadir_swot unet_swoterrscratch_nadir unet_swoterrscratch_nadir_swot \
+$PY -u $S match nadir_swot unet_swoterrscratch_nadir unet_swoterrscratch_nadir_swot \
     fdv_leadfix_nadir fdv_leadfix_nadir_swot fdv29S_nadir fdv29S_nadir_swot; echo "match EXIT $?"
 $PY -u $S analyse; echo "analyse EXIT $?"
